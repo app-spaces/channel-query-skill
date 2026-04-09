@@ -112,42 +112,50 @@
 
 ---
 
-### 2.3 `list_products_and_packages`
-用途：产品与马甲包枚举查询。
+### 2.3 `query_channel_product_list`
+用途：产品枚举查询，优先用于把产品名称或产品 ID 关键字解析成 `productId`。
 
 #### 输入参数
 - `pageNum`
 - `pageSize`
-- `supplierId`，可选，用于产品下拉
-- `productKeyword`
-- `packageKeyword`
+- `key`，模糊匹配产品 ID 或产品名称
 
-#### 输出重点
-顶层：
-- `products`
-- `packages`
-
-`products` 为分页对象，`products.list[]` 为 `DropDown`：
-- `label`
-- `value`
-- `children`
-
-`packages` 为分页对象，`packages.list[]` 重点字段：
-- `id`
-- `productId`
-- `name`
-- `packageName`
-- `productName`
-- `logoUrl`
-- `createdAt` / `updatedAt`
+#### 输出要点
+- 正式查询使用 `list[].productId` 作为 `productId`
+- 默认只返回未删除产品
+- 对用户只优先回写必要字段：`productId`、`name`、`status`、`type`、`model`
+- 原始返回可能带 `logoUrl`、部门、外部同步字段，Skill 不应直接机械回显整行对象
 
 #### 典型用途
 - 产品名称 -> `productId`
-- 马甲包名称 -> 包 ID / 所属 `productId`
+- 产品 ID 关键字 -> 产品候选列表
+- 为产品汇总、结算、分配单等正式查询提供稳定的 `productId`
 
 ---
 
-### 2.4 `list_decision_owners`
+### 2.4 `query_channel_product_package_list`
+用途：马甲包枚举查询，优先用于把马甲包名称 / 包名解析成马甲包候选，并在需要时反查 `productId`。
+
+#### 输入参数
+- `pageNum`
+- `pageSize`
+- `key`，模糊匹配马甲包名称或马甲包标识（包名）
+- `productId`，可选；精确过滤，和 `key` 同时传时为 `AND`
+
+#### 输出要点
+- 使用 `list[].id` 作为马甲包记录标识
+- 下游正式查询仍优先使用 `list[].productId`
+- 对用户只优先回写必要字段：`id`、`productId`、`name`、`packageName`、`productName`
+- 若返回里附带 `logoUrl`，可在候选展示时保留，但不要把整行原始对象直接外抛
+
+#### 典型用途
+- 马甲包名称 / 包名 -> 马甲包候选
+- 马甲包名称 / 包名 -> `productId` -> 继续做产品汇总、结算、分配单等正式查询
+- 已知 `productId` 时，查询该产品下的马甲包列表
+
+---
+
+### 2.5 `list_decision_owners`
 用途：查询决策负责人枚举。
 
 #### 输入参数
@@ -767,6 +775,13 @@
 - Skill 不再默认或推荐使用
 - 评分查询统一走：产品/筛选条件 -> `query_settlement_list` -> `query_settlement_score`
 
+### 7.2 `list_products_and_packages`
+- 视为兼容保留的旧合并接口
+- Skill 不再默认或推荐使用
+- 产品解析统一改走 `query_channel_product_list`
+- 马甲包解析统一改走 `query_channel_product_package_list`
+- 若用户同时要两类候选，也分别调用两个新接口，不依赖旧合并返回壳
+
 ---
 
 ## 8. 推荐路由
@@ -774,7 +789,8 @@
 ### 8.1 名称转 ID
 - 供应商名 -> `query_supplier_list`
 - 子渠道名 -> `list_sub_channels`
-- 产品名 / 马甲包名 -> `list_products_and_packages`
+- 产品名 -> `query_channel_product_list`
+- 马甲包名 / 包名 -> `query_channel_product_package_list`
 - 负责人名 -> `list_decision_owners`
 
 ### 8.2 汇总查询

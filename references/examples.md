@@ -1,18 +1,26 @@
 # examples
 
-以下示例优先使用真实可执行链路，避免写成理想化的一步到位调用。
+只保留当前仍有代表性的真实链路。目标是让 Agent 知道“应该怎么走”，不是维护一份会快速过期的长参数样板。
 
-## 1. 按供应商查个人汇总
+通用约束：
+- 所有 Tool 调用都使用 `{ "request": { ... } }`
+- 先做时间归一化，再做名称到 ID 解析，再调用正式查询
+- 涉及账号、密码、登录地址、登录 IP、收款地址等敏感字段，默认不输出；必要时先脱敏
+- `query_settlement_list` 当前存在过滤不稳定风险，命中结果要二次校验，不可盲信
+
+---
+
+## 1. 供应商重名 -> 个人汇总
 
 ### 用户问题
 查小太妹 4 月 1 日到 4 月 6 日的个人汇总。
 
 ### 正确链路
-1. 先用 `query_supplier_list` 解析 `supplierId`
-2. 命中多个供应商时先澄清
-3. 再调用 `query_personal_summary`
+1. `query_supplier_list` 解析供应商
+2. 如命中多个候选，先澄清 `supplierId`
+3. `query_personal_summary`
 
-### 第一步
+### 示例请求
 ```json
 {
   "request": {
@@ -23,7 +31,6 @@
 }
 ```
 
-### 第二步
 ```json
 {
   "request": {
@@ -37,73 +44,83 @@
 ```
 
 ### 输出重点
-- 回写时间范围
+- 回写实际时间范围
 - 回写 `supplierId`
-- 展示 `summary` 中的核心指标
+- 只摘 `summary` 的核心指标，不机械铺满所有字段
 
 ---
 
-## 2. 按产品查产品汇总
+## 2. 产品名称 -> 结算列表 -> 评分
 
 ### 用户问题
-查抖漫 2 月份的产品汇总。
+查抖漫 2 月 1 日到 2 月 7 日这批结算的评分。
 
 ### 正确链路
-1. 先用 `list_products_and_packages` 解析 `productId`
-2. 再调用 `query_product_summary`
+1. `query_channel_product_list` 解析 `productId`
+2. `query_settlement_list` 定位候选结算单
+3. 如命中多张结算单，先澄清 `settlementNo`
+4. `query_settlement_score`
 
-### 第一步
+### 关键点
+- `query_channel_product_list` 的 `key` 支持匹配产品 ID 或产品名称，且默认只返回未删除产品
+- 如果用户给的是马甲包名称或包名，先改走 `query_channel_product_package_list`，必要时再取其中的 `productId` 继续下钻
+- 评分不是按产品一步直出
+- 结算列表当前存在过滤不稳定风险，必须核对返回行里的 `productId/supplierId/channelChildId`
+- 评分查询正式使用 `settlementNo`
+
+---
+
+## 2B. 马甲包名称 / 包名 -> 反查产品 -> 正式查询
+
+### 用户问题
+查包名 `bk18j` 对应的产品，并继续看产品汇总。
+
+### 正确链路
+1. `query_channel_product_package_list` 用 `key=bk18j` 解析马甲包候选
+2. 如命中多个候选，先澄清 `id` 或 `productId`
+3. 取目标候选里的 `productId`
+4. `query_product_summary` 或其他正式查询
+
+### 关键点
+- `query_channel_product_package_list` 的 `productId` 是可选精确过滤条件，和 `key` 同传时是 `AND`
+- 马甲包接口本身返回的是候选，不等于已经完成正式业务查询
+- 如果用户同时要看产品候选和马甲包候选，分别调两个枚举接口，不走旧合并接口
+
+---
+
+## 3. settlementNo -> 列表定位 id -> 详情
+
+### 用户问题
+帮我看一下 `JS20260203225304378` 的结算详情。
+
+### 正确链路
+1. `query_settlement_list` 用 `settlementNo` 定位记录
+2. 读取结算报告 `id`
+3. `query_settlement_detail`
+
+### 示例请求
 ```json
 {
   "request": {
-    "productKeyword": "抖漫",
+    "settlementNo": "JS20260203225304378",
     "pageNum": 1,
-    "pageSize": 20
+    "pageSize": 10
   }
 }
 ```
 
-### 第二步
 ```json
 {
   "request": {
-    "startTime": "2026-02-01",
-    "endTime": "2026-02-29",
-    "productId": "YC-121",
-    "pageNum": 1,
-    "pageSize": 50
+    "id": "69820bd097aa6a307a839310"
   }
 }
 ```
 
 ### 输出重点
-- 从 `summary` 里读汇总指标
-- `list[]` 主要看 `productInfo + cost + 新增 + 充值`
-
----
-
-## 3. 按供应商查账号
-
-### 用户问题
-看一下小太妹的供应商账号。
-
-### 正确链路
-1. 先用 `query_supplier_list` 解析 `supplierId`
-2. 再调用 `query_supplier_account`
-
-```json
-{
-  "request": {
-    "supplierId": "GYS10007272",
-    "pageNum": 1,
-    "pageSize": 20
-  }
-}
-```
-
-### 输出重点
-- 账号 / 模板 / 域名 / 登录地址 / 状态
-- `cooperationDataConfig` 原样输出，不擅自解释成别的业务口径
+- 结算详情依赖 `id`，不能只靠 `settlementNo`
+- 优先提炼 `promotionInfo`、`analysisData`、`financeInfo`
+- detail 内附带评分信息，不等同于 `query_settlement_score` 结果
 
 ---
 
@@ -117,147 +134,22 @@
 2. `list_sub_channels` -> `channelChildId`
 3. `query_distribute_list`
 
-### 第一步
-```json
-{
-  "request": {
-    "keyword": "小太妹",
-    "pageNum": 1,
-    "pageSize": 20
-  }
-}
-```
-
-### 第二步
-```json
-{
-  "request": {
-    "supplierId": "GYS10007272",
-    "keyword": "默认",
-    "pageNum": 1,
-    "pageSize": 20
-  }
-}
-```
-
-### 第三步
-```json
-{
-  "request": {
-    "supplierId": "GYS10007272",
-    "channelChildId": "00004962",
-    "pageNum": 1,
-    "pageSize": 50
-  }
-}
-```
-
-### 输出重点
-- 不能把“默认子渠道”直接塞给 `channelChildId`
-- 展示 `channelCode`、`promotionLink`、`cooperationMode`、`adSlotType`、`decisionMaker`
+### 关键点
+- 不能把“默认子渠道”直接当成 `channelChildId`
+- 输出时重点看 `channelCode`、`promotionLink`、`cooperationMode`、`adSlotType`
 
 ---
 
-## 5. 按产品查评分
-
-### 用户问题
-查抖漫 2 月 1 日到 2 月 7 日这批结算的评分。
-
-### 正确链路
-1. `list_products_and_packages` 解析 `productId`
-2. `query_settlement_list` 定位结算单
-3. `query_settlement_score` 查评分
-
-### 第一步
-```json
-{
-  "request": {
-    "productKeyword": "抖漫",
-    "pageNum": 1,
-    "pageSize": 20
-  }
-}
-```
-
-### 第二步
-```json
-{
-  "request": {
-    "startTime": "2026-02-01T00:00:00",
-    "endTime": "2026-02-07T23:59:59",
-    "productId": "YC-121",
-    "pageNum": 1,
-    "pageSize": 20,
-    "sortBy": "createdAt",
-    "sortDir": "desc"
-  }
-}
-```
-
-### 第三步
-```json
-{
-  "request": {
-    "settlementNo": "JS20260203225304378",
-    "createdDateStart": "2026-02-01",
-    "createdDateEnd": "2026-02-07",
-    "pageNum": 1,
-    "pageSize": 20
-  }
-}
-```
-
-### 输出重点
-- 评分是按结算单查，不是按产品一步直出
-- `RateDTO` 要保留 `value + score`
-- 如同时间段命中多张结算单，要先澄清目标 `settlementNo`
-
----
-
-## 6. 按结算单查详情
-
-### 用户问题
-帮我看一下 `JS20260203225304378` 的结算详情。
-
-### 正确链路
-1. 先用 `query_settlement_list` 通过 `settlementNo` 定位记录
-2. 拿到结算报告 `id`
-3. 再调用 `query_settlement_detail`
-
-### 第一步
-```json
-{
-  "request": {
-    "settlementNo": "JS20260203225304378",
-    "pageNum": 1,
-    "pageSize": 10
-  }
-}
-```
-
-### 第二步
-```json
-{
-  "request": {
-    "id": "69820bd097aa6a307a839310"
-  }
-}
-```
-
-### 输出重点
-- 结算详情必须带 `id`
-- 重点看 `promotionInfo`、`analysisData`、`financeInfo`、`approvals`
-
----
-
-## 7. 按结算单查推广明细
+## 5. 结算推广明细
 
 ### 用户问题
 看这张结算单 2026-02-02 的推广明细。
 
 ### 正确链路
-先拿到结算报告 `id`，再查推广按天明细。
+1. 先拿结算报告 `id`
+2. `query_settlement_promotion_day`
 
+### 示例请求
 ```json
 {
   "request": {
@@ -271,32 +163,23 @@
 }
 ```
 
-如需实时明细：
-
-```json
-{
-  "request": {
-    "id": "69820bd097aa6a307a839310",
-    "pageNum": 1,
-    "pageSize": 50,
-    "sortBy": "time",
-    "sortDir": "asc"
-  }
-}
-```
-
-### 输出重点
-- `pageData.content[]` 是明细
-- `totalData` 是汇总
-- 正式按天查询建议优先传 `time`
+### 关键点
+- 正式按天查询优先显式带 `time`
+- 不带 `time` 的结果不应当作稳定依据
+- `pageData.content[]` 是明细，`totalData` 是汇总
 
 ---
 
-## 8. 按时间段查结算支出
+## 6. 支出 / 财务支付联合筛选
 
 ### 用户问题
 查 4 月 1 日到 4 月 7 日的已支付结算支出。
 
+### 正确链路
+- 结算支出 -> `query_settlement_expense`
+- 财务支付 -> `query_finance_payment_list`
+
+### 示例请求
 ```json
 {
   "request": {
@@ -309,30 +192,28 @@
 }
 ```
 
-### 输出重点
-- 展示 `approveStatus`
-- 展示金额字段：系统结算、实际结算、财务打款
-- 区分这不是 `query_finance_payment_list`
+### 关键点
+- 时间字段使用 `settlementStartDate/settlementEndDate`
+- 这两条链路的联合筛选目前相对稳定
+- 输出里保留 `approveStatus`、金额字段、主键字段即可
 
 ---
 
-## 9. 按时间段查财务支出列表
+## 7. 已知异常示例：结算列表过滤疑似失效
 
 ### 用户问题
-查 4 月份财务已支付记录。
+查供应商 GYS10006162、产品 YC-121、状态 9、2026-02-01 到 2026-02-07 的结算列表。
 
-```json
-{
-  "request": {
-    "settlementStartDate": "2026-04-01",
-    "settlementEndDate": "2026-04-30",
-    "approveStatus": "PAID",
-    "pageNum": 1,
-    "pageSize": 50
-  }
-}
-```
+### 当前结论
+- 即使传了 `supplierId + productId + status + startTime/endTime`
+- `query_settlement_list` 仍可能混入不匹配记录
 
-### 输出重点
-- `query_finance_payment_list` 比 `query_settlement_expense` 多了财务支付视角字段
-- 重点展示 `channelSettlementReportId`、`settlementSysUserId`、`remarksUrls`
+### Agent 应对方式
+1. 正常调用 `query_settlement_list`
+2. 对返回行逐条校验关键过滤条件
+3. 若发现明显不匹配记录，输出中明确提示“疑似后端过滤异常”
+4. 保留异常样本，供后端复核
+
+### 不应该做的事
+- 不应把返回成功直接等同于过滤正确
+- 不应在这种结果上继续做高置信业务结论

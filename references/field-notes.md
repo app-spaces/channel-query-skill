@@ -4,6 +4,8 @@
 
 - `supplierId`：供应商 ID，常见前缀 `GYS`
 - `productId`：产品 ID，常见形态如 `YC-001`、`BF-001`、`SF-001`、`DX-002`
+- 产品枚举默认走 `query_channel_product_list`，`key` 支持匹配产品 ID 或产品名称，且默认只看未删除产品
+- 马甲包枚举默认走 `query_channel_product_package_list`，`key` 支持匹配马甲包名称或包名；如已知 `productId`，可再叠加精确过滤
 - `channelChildId`：子渠道 ID，必须依赖 `supplierId` 先枚举
 - `ownerId`：决策负责人 ID，来自 `list_decision_owners`
 - 结算详情 / 推广明细使用结算报告 `id`
@@ -177,8 +179,10 @@
 4. `query_finance_payment_list` 与 `query_settlement_expense` 都是支出查询，但一个偏财务支付视角，一个偏结算支付视角。
 5. `detail.analysisData.scoreInfo` 是结算详情附带评分信息；如用户明确要查评分明细，以 `query_settlement_score` 为准。
 
-## 8. 已停用接口
+## 8. 已停用 / 兼容保留接口
 
 - `query_toll_and_free_score` 已停用
 - 不再作为默认评分入口
 - 按产品查评分时，统一走：产品解析 -> `query_settlement_list` -> `query_settlement_score`
+- `list_products_and_packages` 仅作为兼容保留的旧合并接口存在时参考，Skill 默认不走它
+- 涉及产品 / 马甲包解析时，统一优先走独立的 `query_channel_product_list` / `query_channel_product_package_list`
