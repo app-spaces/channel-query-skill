@@ -36,7 +36,70 @@
 
 ## 2. 枚举与解析 Tool
 
-### 2.1 `query_supplier_list`
+### 2.1 `list_approval_user_dept`
+用途：查询部门枚举，把部门名称解析成 `secondDeptId`。
+
+#### 输入参数
+- 仅要求最外层存在 `request`
+- 当前可传空对象：`{"request": {}}`
+
+#### 输出重点
+顶层：`list/total`
+
+`list[]` 为 `DropDown`，但字段语义较特殊：
+- `label`：部门 ID，也就是应回写的 `secondDeptId`
+- `value`：部门名称
+- `children`
+
+#### 典型用途
+- 部门名称 -> `secondDeptId`
+- 为“某部门汇总”“某部门下组员”“某部门下某组员汇总”提供前置 ID
+
+---
+
+### 2.2 `list_decision_member`
+用途：查询部门下组员枚举，把组员展示名解析成 `memberId`。
+
+#### 输入参数
+- `roleId`，部门 ID，也就是 `secondDeptId`
+
+#### 输出重点
+顶层：`list/total`
+
+`list[]` 为 `DropDown`：
+- `label`：组员展示名，常见格式如 `lsz4311-李适之`
+- `value`：组员 ID，也就是应回写的 `memberId`
+- `children`
+
+#### 典型用途
+- `secondDeptId` + 组员名称 -> `memberId`
+- 为“某部门下某组员”的汇总查询提供前置 ID
+
+---
+
+### 2.3 `list_decision_owners`
+用途：查询决策负责人枚举。
+
+#### 输入参数
+- `roleId`，可选，不传则按当前用户权限返回
+
+#### 输出重点
+- `list`
+- `total`
+
+`list[]` 为 `DropDown`：
+- `label`
+- `value`
+- `children`
+
+#### 典型用途
+- 负责人名称 -> `ownerId`
+- 有树形结构时优先取叶子或明确选中项的 `value`
+- 注意不要与 `list_decision_member` 混用
+
+---
+
+### 2.4 `query_supplier_list`
 用途：查供应商列表，或把供应商名称解析成 `supplierId`。
 
 #### 输入参数
@@ -88,7 +151,7 @@
 
 ---
 
-### 2.2 `list_sub_channels`
+### 2.5 `list_sub_channels`
 用途：在已知 `supplierId` 的前提下，查询子渠道。
 
 #### 输入参数
@@ -112,7 +175,7 @@
 
 ---
 
-### 2.3 `query_channel_product_list`
+### 2.6 `query_channel_product_list`
 用途：产品枚举查询，优先用于把产品名称或产品 ID 关键字解析成 `productId`。
 
 #### 输入参数
@@ -133,7 +196,7 @@
 
 ---
 
-### 2.4 `query_channel_product_package_list`
+### 2.7 `query_channel_product_package_list`
 用途：马甲包枚举查询，优先用于把马甲包名称 / 包名解析成马甲包候选，并在需要时反查 `productId`。
 
 #### 输入参数
@@ -155,27 +218,6 @@
 
 ---
 
-### 2.5 `list_decision_owners`
-用途：查询决策负责人枚举。
-
-#### 输入参数
-- `roleId`，可选，不传则按当前用户权限返回
-
-#### 输出重点
-- `list`
-- `total`
-
-`list[]` 为 `DropDown`：
-- `label`
-- `value`
-- `children`
-
-#### 典型用途
-- 负责人名称 -> `ownerId`
-- 有树形结构时优先取叶子或明确选中项的 `value`
-
----
-
 ## 3. 汇总 Tool
 
 ### 3.1 `query_personal_summary`
@@ -184,13 +226,22 @@
 #### 输入参数
 - `pageNum`
 - `pageSize`
+- `secondDeptId`
+- `memberId`
+- `ownerId`
 - `supplierId`
 - `subChannelId`
 - `productId`
-- `ownerId`
 - `channelCodeList`，支持单个或逗号分隔多个
+- `channelCode`，`channelCodeList` 的单值别名
 - `startTime`，`yyyy-MM-dd`
 - `endTime`，`yyyy-MM-dd`
+
+补充说明：
+- 部门过滤用 `secondDeptId`
+- 组员过滤用 `memberId`
+- 决策负责人过滤用 `ownerId`
+- “某部门下某组员”优先组合传 `secondDeptId + memberId`
 
 #### 输出重点
 顶层：
@@ -215,6 +266,7 @@
 - `profitCny`
 - `costUnitCny`
 - `recycleRatio`
+- `roi`
 - `landingPageViews`
 - `landingPageClicks`
 - `uniqueClicks`
@@ -251,10 +303,21 @@
 - `profitCnySum`
 - `costUnitCnySum`
 - `recycleRatioSum`
+- `roi`（接口可能返回，但从 Skill 层默认屏蔽，不作为汇总输出字段）
+
+#### 对外默认口径
+适用范围：`query_personal_summary`
+
+- 成本：默认使用 `costUnitCny`；汇总层对应 `summary.costUnitCnySum`
+- 回收比：默认使用 `recycleRatio`；汇总层对应 `summary.recycleRatioSum`
+- ROI：默认使用 `list[].roi` 作为单渠道 / 单记录口径；`summary.roi` 从 Skill 层默认屏蔽
+- 盈亏CNY：默认使用 `profitCny`；汇总层对应 `summary.profitCnySum`
+- 打款金额CNY：默认使用 `payAmountCny`；汇总层对应 `summary.payAmountCnySum`
+- `cost` 仅作为原始返回中的成本相关字段保留，不作为默认“个人汇总成本”口径；除非用户明确指定
 
 #### 典型用途
 - 个人维度投放 / 转化 / 充值 / 盈亏汇总
-- 供应商 / 子渠道 / 产品 / 负责人多条件组合筛选
+- 部门 / 组员 / 决策负责人 / 供应商 / 子渠道 / 产品多条件组合筛选
 
 ---
 
@@ -262,7 +325,7 @@
 用途：按产品维度查询汇总。
 
 #### 输入参数
-与 `query_personal_summary` 完全一致。
+与 `query_personal_summary` 完全一致，包括 `secondDeptId`、`memberId`、`ownerId` 三类人员维度过滤。
 
 #### 输出重点
 顶层：`list/total/pageNum/pageSize/summary`
@@ -787,11 +850,13 @@
 ## 8. 推荐路由
 
 ### 8.1 名称转 ID
+- 部门名 -> `list_approval_user_dept`
+- 部门下组员名 -> `list_decision_member`
+- 决策负责人名 -> `list_decision_owners`
 - 供应商名 -> `query_supplier_list`
 - 子渠道名 -> `list_sub_channels`
 - 产品名 -> `query_channel_product_list`
 - 马甲包名 / 包名 -> `query_channel_product_package_list`
-- 负责人名 -> `list_decision_owners`
 
 ### 8.2 汇总查询
 - 个人汇总 -> `query_personal_summary`
@@ -807,7 +872,8 @@
 - 查财务支出 -> `query_finance_payment_list`
 
 ### 8.4 常见多段链路
-1. 供应商 -> 子渠道 -> 分配单
-2. 产品 -> 结算单列表 -> 结算评分
-3. settlementNo -> 结算列表定位 -> 详情 / 推广
-4. 供应商 -> 账号 -> 配置 / 登录信息
+1. 部门 -> 组员 -> 个人汇总
+2. 供应商 -> 子渠道 -> 分配单
+3. 产品 -> 结算单列表 -> 结算评分
+4. settlementNo -> 结算列表定位 -> 详情 / 推广
+5. 供应商 -> 账号 -> 配置 / 登录信息

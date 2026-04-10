@@ -121,9 +121,20 @@
 
 ## 5. 汇总与分析字段口径
 
-### 5.1 汇总类字段
-- `costUnitCnySum`：成本 CNY 汇总，按去重渠道平均
-- `recycleRatioSum`：回收比汇总，按去重渠道平均
+### 5.1 个人汇总默认对外口径
+适用范围：`query_personal_summary`
+
+- `list[].costUnitCny`：个人汇总默认“成本”口径
+- `list[].recycleRatio`：个人汇总默认“回收比”口径
+- `list[].roi`：个人汇总默认“ROI”口径
+- `list[].profitCny`：个人汇总默认“盈亏CNY”口径
+- `list[].payAmountCny`：个人汇总默认“打款金额CNY”口径
+- `list[].cost`：原始返回中的成本相关字段，不作为默认“个人汇总成本”口径；除非用户明确指定要看 `cost`
+- `summary.costUnitCnySum`：个人汇总层“成本”口径，按去重渠道平均
+- `summary.recycleRatioSum`：个人汇总层“回收比”口径，按去重渠道平均
+- `summary.roi`：接口可能返回，但从 Skill 层默认屏蔽，不作为汇总输出字段
+- `summary.profitCnySum`：个人汇总层盈亏CNY口径
+- `summary.payAmountCnySum`：个人汇总层打款金额CNY口径
 
 ### 5.2 结算分析字段公式
 - `analysisData.costUnitPrice = 系统结算金额(CNY) / 新增(原始值)`
