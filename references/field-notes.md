@@ -61,6 +61,16 @@
 
 ## 4. 状态与枚举口径
 
+## 4.x 供应商归属人与创建人（不要混用）
+
+- **渠道归属人筛选（入参）**：`query_supplier_list.request.maintainer`（语义：供应商归属的 member，通常用于“看某人名下供应商”）
+- **创建人统计（返回字段）**：`createByNickName/createByUserName`（语义：谁创建了该供应商记录，用于“最近7天谁创建了多少供应商”的排行）
+- **归属字段（返回字段）**：`memberName`/`member`（语义：当前供应商归属到谁，可能与创建人不同）
+
+口径建议：
+- 用户说“按归属/名下” -> 用 `maintainer` 过滤
+- 用户说“按创建/新增/谁创建的” -> 用 `createStartDate/createEndDate` 过滤后，按创建人字段做聚合
+
 ### 4.1 结算状态
 当前已知：
 - `0 = 待结算`

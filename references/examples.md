@@ -1,5 +1,57 @@
 # examples
 
+## 最近 7 天“创建供应商”排行（按创建人聚合）
+
+目标：统计最近 7 天（含今天）每个创建人创建了多少供应商，并按数量降序排行。
+
+口径：
+- 时间过滤：使用 `query_supplier_list` 的 `createStartDate/createEndDate`（`yyyy-MM-dd`）
+- 聚合维度：返回字段 `createByNickName(createByUserName)`
+- 注意：这不是“归属人/名下供应商”，归属人筛选要用 `maintainer`
+
+### 步骤
+
+1) 计算时间范围
+- end = 今天
+- start = end 往前推 6 天
+
+2) 分页拉取列表并聚合
+
+请求示例（第 1 页，每页 50 条）：
+
+```json
+{
+  "request": {
+    "pageNum": 1,
+    "pageSize": 50,
+    "createStartDate": "2026-04-24",
+    "createEndDate": "2026-04-30"
+  }
+}
+```
+
+聚合伪代码：
+
+```text
+counts = map()
+for pageNum in 1..N:
+  resp = query_supplier_list(request)
+  for supplier in resp.list:
+    key = supplier.createByNickName + '(' + supplier.createByUserName + ')'
+    counts[key] += 1
+  stop when fetched >= resp.total
+sort counts desc
+output TopN + total + range
+```
+
+### 输出模板（标准版）
+
+- 最近 7 天（{start}~{end}）新增供应商：{total} 个
+- 创建人排行 Top{N}：
+  1) {name1} {count1}
+  2) {name2} {count2}
+  ...
+
 只保留当前仍有代表性的真实链路。目标是让 Agent 知道“应该怎么走”，不是维护一份会快速过期的长参数样板。
 
 通用约束：

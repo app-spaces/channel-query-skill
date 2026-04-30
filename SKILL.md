@@ -30,7 +30,7 @@ description: 渠道系统 MCP 查询 Skill。处理汇总、部门、组员、�
 
 ## 版本标识
 
-- 当前版本：`v2026.04.10`
+- 当前版本：`v2026.04.30`
 - 版本用途：用于标记当前 skill 的规则口径、引用结构与回归基线
 - 何时升级版本：当 Tool 路由、关键字段口径、前置约束、异常处理规则、references 结构发生实质变化时
 - 建议规则：先改内容，再手动递增版本；当前阶段用日期版最省事，也最容易和回归文档对齐
@@ -42,6 +42,7 @@ description: 渠道系统 MCP 查询 Skill。处理汇总、部门、组员、�
 - `list_decision_member`
 - `list_decision_owners`
 - `query_supplier_list`
+- `query_supplier_detail`
 - `list_sub_channels`
 - `query_channel_product_list`
 - `query_channel_product_package_list`
@@ -133,6 +134,7 @@ description: 渠道系统 MCP 查询 Skill。处理汇总、部门、组员、�
 
 ### 供应商类
 - 查供应商列表 / 解析 supplierId -> `query_supplier_list`
+- 查供应商详情（需 supplierId） -> `query_supplier_detail`
 - 查供应商账号 -> `query_supplier_account`
 
 ### 分配与枚举类
@@ -203,6 +205,11 @@ description: 渠道系统 MCP 查询 Skill。处理汇总、部门、组员、�
 11. `query_personal_summary` / `query_product_summary` 返回中的 `queryStartDate` / `queryEndDate` 是展示字段；若与用户请求范围不完全一致，不要直接判定为筛选失效。
 12. `list_approval_user_dept` 的返回字段语义与常见 `DropDown` 相反，当前应按 `label=部门ID`、`value=部门名称` 使用，避免把部门中文名误当成 ID。
 13. `list_decision_member` 适用于“部门下组员”链路，`list_decision_owners` 适用于“决策负责人”链路，两者不要混用。
+
+## 事实来源（Single Source of Truth）
+
+- Tool 清单、入参/出参与口径的权威说明，以 Obsidian 文档为准：`/data/obsidian-vault/DMP/MCP_Tools_Spec_2026-04-25.md`
+- 本 Skill 内 `references/*` 作为“执行与路由手册”，当与权威文档冲突时，应先更新权威文档或以其为准后再回填 Skill。
 
 ## 参考资料
 
